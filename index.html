@@ -108,10 +108,10 @@
         <div class="settings">
             <h2>Settings</h2>
             <label>
-                <input type="checkbox" id="autoDownload"> Auto-download after pasting or drag-and-drop
+                <input type="checkbox" id="autoDownload" checked> Auto-download after pasting or drag-and-drop
             </label>
             <label>
-                <input type="checkbox" id="autoSave"> Auto-save thumbnails to local drive
+                <input type="checkbox" id="autoSave" checked> Auto-save thumbnails to local drive
             </label>
             <label>
                 Thumbnail Size:
@@ -125,6 +125,32 @@
     </div>
 
     <script>
+        // Load settings from localStorage
+        const autoDownload = document.getElementById('autoDownload');
+        const autoSave = document.getElementById('autoSave');
+        const thumbnailSize = document.getElementById('thumbnailSize');
+
+        if (localStorage.getItem('autoDownload') === 'true') {
+            autoDownload.checked = true;
+        }
+        if (localStorage.getItem('autoSave') === 'true') {
+            autoSave.checked = true;
+        }
+        if (localStorage.getItem('thumbnailSize')) {
+            thumbnailSize.value = localStorage.getItem('thumbnailSize');
+        }
+
+        // Save settings to localStorage
+        autoDownload.addEventListener('change', () => {
+            localStorage.setItem('autoDownload', autoDownload.checked);
+        });
+        autoSave.addEventListener('change', () => {
+            localStorage.setItem('autoSave', autoSave.checked);
+        });
+        thumbnailSize.addEventListener('change', () => {
+            localStorage.setItem('thumbnailSize', thumbnailSize.value);
+        });
+
         // Drag and drop functionality
         const dragDropArea = document.getElementById('dragDropArea');
         dragDropArea.addEventListener('dragover', (e) => {
@@ -141,7 +167,7 @@
             dragDropArea.style.backgroundColor = 'transparent';
             const url = e.dataTransfer.getData('text/plain');
             document.getElementById('videoUrl').value = url;
-            if (document.getElementById('autoDownload').checked) {
+            if (autoDownload.checked) {
                 fetchThumbnail();
             }
         });
@@ -162,42 +188,23 @@
             }
 
             try {
-                // Extract video ID from the URL
-                const videoId = extractYouTubeVideoId(videoUrl);
-                if (!videoId) {
-                    errorMessage.textContent = 'Invalid YouTube URL. Please check the link.';
+                const thumbnailUrl = await getThumbnailUrl(videoUrl);
+                if (!thumbnailUrl) {
+                    errorMessage.textContent = 'Unsupported platform or invalid URL.';
                     return;
                 }
 
-                // Construct the thumbnail URL (highest quality)
-                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+                // Display the thumbnail
+                thumbnailContainer.innerHTML = `
+                    <img src="${thumbnailUrl}" alt="Video Thumbnail">
+                    <br>
+                    <button onclick="downloadThumbnail('${thumbnailUrl}')">Download Thumbnail</button>
+                `;
 
-                // Check if the thumbnail exists
-                const img = new Image();
-                img.src = thumbnailUrl;
-                img.onload = () => {
-                    // Display the thumbnail
-                    thumbnailContainer.innerHTML = `
-                        <img src="${thumbnailUrl}" alt="Video Thumbnail">
-                        <br>
-                        <button onclick="downloadThumbnail('${thumbnailUrl}')">Download Thumbnail</button>
-                    `;
-                    if (document.getElementById('autoSave').checked) {
-                        downloadThumbnail(thumbnailUrl);
-                    }
-                };
-                img.onerror = () => {
-                    // Fallback to lower quality if maxresdefault is not available
-                    const fallbackThumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-                    thumbnailContainer.innerHTML = `
-                        <img src="${fallbackThumbnailUrl}" alt="Video Thumbnail">
-                        <br>
-                        <button onclick="downloadThumbnail('${fallbackThumbnailUrl}')">Download Thumbnail</button>
-                    `;
-                    if (document.getElementById('autoSave').checked) {
-                        downloadThumbnail(fallbackThumbnailUrl);
-                    }
-                };
+                // Auto-save if enabled
+                if (autoSave.checked) {
+                    downloadThumbnail(thumbnailUrl);
+                }
             } catch (error) {
                 errorMessage.textContent = 'An error occurred. Please try again.';
             }
@@ -207,15 +214,54 @@
         function downloadThumbnail(thumbnailUrl) {
             const link = document.createElement('a');
             link.href = thumbnailUrl;
-            link.download = 'thumbnail.jpg';
+            link.download = `thumbnail_${Date.now()}.jpg`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
-        // Helper function to extract YouTube video ID
+        // Helper function to get thumbnail URL for multiple platforms
+        function getThumbnailUrl(url) {
+            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                const videoId = extractYouTubeVideoId(url);
+                return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+            } else if (url.includes('vimeo.com')) {
+                const videoId = extractVimeoVideoId(url);
+                return fetch(`https://vimeo.com/api/v2/video/${videoId}.json`)
+                    .then(response => response.json())
+                    .then(data => data[0].thumbnail_large);
+            } else if (url.includes('dailymotion.com') || url.includes('dai.ly')) {
+                const videoId = extractDailymotionVideoId(url);
+                return `https://www.dailymotion.com/thumbnail/video/${videoId}`;
+            } else if (url.includes('facebook.com')) {
+                // Facebook requires a backend due to restrictions
+                return null;
+            } else if (url.includes('tiktok.com')) {
+                // TikTok requires a backend due to restrictions
+                return null;
+            } else if (url.includes('instagram.com')) {
+                // Instagram requires a backend due to restrictions
+                return null;
+            } else {
+                return null;
+            }
+        }
+
+        // Helper functions to extract video IDs
         function extractYouTubeVideoId(url) {
             const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        function extractVimeoVideoId(url) {
+            const regex = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d+)/;
+            const match = url.match(regex);
+            return match ? match[1] : null;
+        }
+
+        function extractDailymotionVideoId(url) {
+            const regex = /(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/;
             const match = url.match(regex);
             return match ? match[1] : null;
         }
