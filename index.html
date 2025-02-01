@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Thumbnail Downloader</title>
+    <title>Ultimate Thumbnail Downloader</title>
     <style>
+        /* General Styles */
         body {
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
+            background-color: #007bff;
+            color: #fff;
             margin: 0;
             padding: 0;
             display: flex;
@@ -18,22 +20,24 @@
         }
 
         .container {
-            background: #fff;
+            background-color: #0056b3;
             padding: 2rem;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             text-align: center;
-            max-width: 500px;
-            width: 100%;
+            width: 1500px;
+            height: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         h1 {
             margin-bottom: 1rem;
-            color: #333;
         }
 
         input[type="text"] {
-            width: 100%;
+            width: 80%;
             padding: 0.5rem;
             margin-bottom: 1rem;
             border: 1px solid #ccc;
@@ -43,16 +47,17 @@
 
         button {
             padding: 0.5rem 1rem;
-            background-color: #007bff;
+            background-color: #004080;
             color: #fff;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 1rem;
+            margin: 0.5rem;
         }
 
         button:hover {
-            background-color: #0056b3;
+            background-color: #003366;
         }
 
         .thumbnail {
@@ -65,22 +70,84 @@
         }
 
         .error {
-            color: red;
+            color: #ff4444;
             margin-top: 1rem;
+        }
+
+        .drag-drop-area {
+            border: 2px dashed #fff;
+            padding: 2rem;
+            margin: 1rem 0;
+            width: 80%;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .settings {
+            margin-top: 1rem;
+        }
+
+        .settings label {
+            display: block;
+            margin: 0.5rem 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Video Thumbnail Downloader</h1>
-        <input type="text" id="videoUrl" placeholder="Paste YouTube video URL here...">
+        <h1>Ultimate Thumbnail Downloader</h1>
+        <input type="text" id="videoUrl" placeholder="Paste video URL here...">
         <button onclick="fetchThumbnail()">Get Thumbnail</button>
+        <div class="drag-drop-area" id="dragDropArea">
+            Drag and drop a video URL here
+        </div>
         <div class="thumbnail" id="thumbnailContainer"></div>
         <div class="error" id="errorMessage"></div>
+
+        <!-- Settings -->
+        <div class="settings">
+            <h2>Settings</h2>
+            <label>
+                <input type="checkbox" id="autoDownload"> Auto-download after pasting or drag-and-drop
+            </label>
+            <label>
+                <input type="checkbox" id="autoSave"> Auto-save thumbnails to local drive
+            </label>
+            <label>
+                Thumbnail Size:
+                <select id="thumbnailSize">
+                    <option value="640x480">640x480</option>
+                    <option value="1280x720">1280x720</option>
+                    <option value="1920x1080">1920x1080</option>
+                </select>
+            </label>
+        </div>
     </div>
 
     <script>
-        function fetchThumbnail() {
+        // Drag and drop functionality
+        const dragDropArea = document.getElementById('dragDropArea');
+        dragDropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragDropArea.style.backgroundColor = '#004080';
+        });
+
+        dragDropArea.addEventListener('dragleave', () => {
+            dragDropArea.style.backgroundColor = 'transparent';
+        });
+
+        dragDropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragDropArea.style.backgroundColor = 'transparent';
+            const url = e.dataTransfer.getData('text/plain');
+            document.getElementById('videoUrl').value = url;
+            if (document.getElementById('autoDownload').checked) {
+                fetchThumbnail();
+            }
+        });
+
+        // Fetch thumbnail function
+        async function fetchThumbnail() {
             const videoUrl = document.getElementById('videoUrl').value;
             const thumbnailContainer = document.getElementById('thumbnailContainer');
             const errorMessage = document.getElementById('errorMessage');
@@ -90,42 +157,53 @@
             errorMessage.textContent = '';
 
             if (!videoUrl) {
-                errorMessage.textContent = 'Please enter a valid YouTube video URL.';
+                errorMessage.textContent = 'Please enter a valid video URL.';
                 return;
             }
 
-            // Extract video ID from the URL
-            const videoId = extractYouTubeVideoId(videoUrl);
-            if (!videoId) {
-                errorMessage.textContent = 'Invalid YouTube URL. Please check the link.';
-                return;
+            try {
+                // Extract video ID from the URL
+                const videoId = extractYouTubeVideoId(videoUrl);
+                if (!videoId) {
+                    errorMessage.textContent = 'Invalid YouTube URL. Please check the link.';
+                    return;
+                }
+
+                // Construct the thumbnail URL (highest quality)
+                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+
+                // Check if the thumbnail exists
+                const img = new Image();
+                img.src = thumbnailUrl;
+                img.onload = () => {
+                    // Display the thumbnail
+                    thumbnailContainer.innerHTML = `
+                        <img src="${thumbnailUrl}" alt="Video Thumbnail">
+                        <br>
+                        <button onclick="downloadThumbnail('${thumbnailUrl}')">Download Thumbnail</button>
+                    `;
+                    if (document.getElementById('autoSave').checked) {
+                        downloadThumbnail(thumbnailUrl);
+                    }
+                };
+                img.onerror = () => {
+                    // Fallback to lower quality if maxresdefault is not available
+                    const fallbackThumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+                    thumbnailContainer.innerHTML = `
+                        <img src="${fallbackThumbnailUrl}" alt="Video Thumbnail">
+                        <br>
+                        <button onclick="downloadThumbnail('${fallbackThumbnailUrl}')">Download Thumbnail</button>
+                    `;
+                    if (document.getElementById('autoSave').checked) {
+                        downloadThumbnail(fallbackThumbnailUrl);
+                    }
+                };
+            } catch (error) {
+                errorMessage.textContent = 'An error occurred. Please try again.';
             }
-
-            // Construct the thumbnail URL (highest quality)
-            const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-
-            // Check if the thumbnail exists
-            const img = new Image();
-            img.src = thumbnailUrl;
-            img.onload = () => {
-                // Display the thumbnail
-                thumbnailContainer.innerHTML = `
-                    <img src="${thumbnailUrl}" alt="Video Thumbnail">
-                    <br>
-                    <button onclick="downloadThumbnail('${thumbnailUrl}')">Download Thumbnail</button>
-                `;
-            };
-            img.onerror = () => {
-                // Fallback to lower quality if maxresdefault is not available
-                const fallbackThumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-                thumbnailContainer.innerHTML = `
-                    <img src="${fallbackThumbnailUrl}" alt="Video Thumbnail">
-                    <br>
-                    <button onclick="downloadThumbnail('${fallbackThumbnailUrl}')">Download Thumbnail</button>
-                `;
-            };
         }
 
+        // Download thumbnail function
         function downloadThumbnail(thumbnailUrl) {
             const link = document.createElement('a');
             link.href = thumbnailUrl;
